@@ -20,6 +20,7 @@ from scipy.stats import shapiro
 from scipy.stats import normaltest
 from numpy import arange
 
+# TODO: Add internal meta-analysis, in line with https://www.pnas.org/doi/full/10.1073/pnas.2024292118
 
 # def functions
 
@@ -55,6 +56,9 @@ def manip_df(df_mdd, df_tweets, topics):
     df['mean_my_word_len_log'] = np.log(df['mean_my_word_len'] + 1)
     df['mean_my_words_in_sen_log'] = np.log(df['mean_my_words_in_sen'] + 1)
     df['n_tweets_log'] = np.log(df['n_tweets'] + 1)
+
+    df['n_tweets_log_CHECK'] = (np.log(df['n_tweets'] + 1))*2
+
     df['n_tweetsPlusRTs_log'] = np.log((df['n_tweets'] + df['n_RTs']) + 1)
     df['n_replies_log'] = np.log(df['n_replies'] + 1)
     df['n_RTs_log'] = np.log(df['n_RTs'] + 1)
@@ -90,7 +94,7 @@ def manip_df(df_mdd, df_tweets, topics):
     return df
 
 def manip_i_df(df_i_tweets, manipd_df):
-    df = pd.merge(df_i_tweets, manipd_df[['text_id', 'neg_art', 'my_word_count_log', 'mean_my_word_len_log',
+    df = pd.merge(df_i_tweets, manipd_df[['text_id', 'neg_art', 'neg_title', 'my_word_count_log', 'mean_my_word_len_log',
      'mean_my_words_in_sen_log', 'year_2020', 'year_2021', 'day_of_week_1', 'day_of_week_2', 'day_of_week_3',
      'day_of_week_4', 'day_of_week_5', 'day_of_week_6', 'month_02', 'month_03', 'month_04', 'month_05', 'month_06',
      'month_07', 'month_08', 'month_09', 'month_10', 'month_11', 'month_12']], on='text_id')  # left/inner join
@@ -232,16 +236,16 @@ root = '/Users/jw/Desktop/dt/jbs_work/Psychometrician_position/fun_proj_attempts
 topics = pd.read_csv(root + 'art_topic.csv')  # topics, all arts all papers
 df_tweetsDM = pd.read_csv(root + 'aggDM.csv')  # Daily Mail
 df_i_tweetsDM = pd.read_csv(root + 'tweets_aggDM.csv')  # Daily Mail
-df_mddDM = pd.read_csv(root + 'mddatc_dailymail.csv')
+df_mddDM = pd.read_csv(root + 'mddatcf_dailymail.csv')
 df_tweetsG = pd.read_csv(root + 'aggG.csv')  # Guardian
 df_i_tweetsG = pd.read_csv(root + 'tweets_aggG.csv')  # Daily Mail
-df_mddG = pd.read_csv(root + 'mddatc_guardian.csv')
+df_mddG = pd.read_csv(root + 'mddatcf_guardian.csv')
 df_tweetsNYP = pd.read_csv(root + 'aggNYP.csv')  # New York Post
 df_i_tweetsNYP = pd.read_csv(root + 'tweets_aggNYP.csv')  # Daily Mail
-df_mddNYP = pd.read_csv(root + 'mddatc_nypost.csv')
+df_mddNYP = pd.read_csv(root + 'mddatcf_nypost.csv')
 df_i_tweetsNYT = pd.read_csv(root + 'tweets_aggNYT.csv')  # Daily Mail
 df_tweetsNYT = pd.read_csv(root + 'aggNYT.csv')  # New York Times
-df_mddNYT = pd.read_csv(root + 'mddatc_nytimes.csv')
+df_mddNYT = pd.read_csv(root + 'mddatcf_nytimes.csv')
 
 dfs_list = [[df_tweetsDM, df_mddDM], [df_tweetsG, df_mddG], [df_tweetsNYP, df_mddNYP], [df_tweetsNYT, df_mddNYT]]
 
@@ -273,14 +277,24 @@ analyses_dict = {}
 
 # main models
 for i, paper_name in enumerate(paper_names):
-    analyses_dict[f'MR_core{paper_name}'] = run_standard_reg(Y=Y, T=T, X=X, df=manip_dfs_list[i], paper_name=paper_name)
+    analyses_dict[f'MR_core{paper_name}'] = run_standard_reg(Y='n_tweets_log_CHECK', T=T, X=X, df=manip_dfs_list[i], paper_name=paper_name)
 
 # robustness checks, using alt neg art defin
 for i, paper_name in enumerate(paper_names):
     analyses_dict[f'MR_core_rob{paper_name}'] = run_standard_reg(Y=Y, T='neg_art_r', X=X, df=manip_dfs_list[i],
                                                                paper_name=paper_name)
 
-# core models with topic controls
+# PS 'robustness' check models
+for i, paper_name in enumerate(paper_names):
+    analyses_dict[f'MR_core_PSrob{paper_name}'] = run_prop_score_model(Y=Y, T=T, X=X, df=manip_dfs_list[i],
+                                                               paper_name=paper_name)
+
+# DR 'robustness' check models
+for i, paper_name in enumerate(paper_names):
+    analyses_dict[f'MR_core_DRrob{paper_name}'] = run_dr_model(Y=Y, T=T, X=X, df=manip_dfs_list[i],
+                                                               paper_name=paper_name)
+
+# core models with topic controls 'robustness' check models
 for i, paper_name in enumerate(paper_names):
     analyses_dict[f'MR_core_topic_cont{paper_name}'] = run_standard_reg(Y=Y, T=T, X=X + ['dominant_topic'], df=manip_dfs_list[i],
                                                                paper_name=paper_name)
@@ -335,14 +349,29 @@ for i, paper_name in enumerate(paper_names):
                                                                   df=manip_dfs_list[i][manip_dfs_list[i][any_nation]==1],
                                                                   paper_name=paper_name)
 
-# predicting RT of tweets
+# predicting RT of tweets re neg arts
 for i, paper_name in enumerate(paper_names):
     analyses_dict[f'MR_core_LogRTs{paper_name}'] = run_standard_reg(Y='n_RTs_log', T='neg_art', X=X+['char_length_tweet_log'],
                                                                  df=manip_i_dfs_list[i], paper_name=paper_name)
 
+# predicting RT of tweets using title
+for i, paper_name in enumerate(paper_names):
+    analyses_dict[f'MR_core_LogRTs{paper_name}'] = run_standard_reg(Y='n_RTs_log', T='neg_title',
+                                                                    X=X+['char_length_tweet_log'],
+                                                                    df=manip_i_dfs_list[i], paper_name=paper_name)
+
+# core but predicting tweets+RTs
 for i, paper_name in enumerate(paper_names):
     analyses_dict[f'MR_core_pred_tweetsRTs{paper_name}'] = run_standard_reg(Y='n_tweetsPlusRTs_log', T='neg_art', X=X, df=manip_dfs_list[i], paper_name=paper_name)
 
-all_results = pd.DataFrame(analyses_dict).T
-#all_results.to_csv(root + 'all_results04062023.csv')
+# internal meta-analysis... to be added
 
+all_results = pd.DataFrame(analyses_dict).T
+all_results.columns = ['paper', 'analysis_method', 'y_variable', 'key_predictors', 'controls', 'sample_size',
+                       'point_est1', 'lower_est1', 'upper_est1', 'point_est2', 'lower_est2', 'upper_est2', 'point_est3',
+                       'lower_est3', 'upper_est3']
+
+#all_results.to_csv(root + 'all_results17062023.csv')  # with 'fascist' removed from cons identity words (due to
+# presence in Vader dict)
+#all_results.to_csv(root + 'all_results07062023.csv')  # with 'fascist' erroneously left in cons identity words, and
+# therefore containing some models with multicollinearity problems
